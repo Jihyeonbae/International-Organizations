@@ -1,1 +1,1 @@
-My project on AIGO
+This is a compilation of information about intergovernmental organizations. 
