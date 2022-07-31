@@ -17,8 +17,8 @@ igo <- igo%>%
   as.data.frame()
 
 #Model1) Within-FE Model
-model1 <-plm(poolconstit
-                 ~ AIGO + trade + log(gdp_cap) + number + alliances + disparity,
+model1 <-plm(pooling
+                 ~ polyarchy + trade + log(gdp_cap) + number + alliances + disparity,
             data = igo,
             index = c("cow_igocode", "year"),
             model = "within",
@@ -29,8 +29,8 @@ summary(model1, vcovBK(model1))
 
 #Model2) Two way FE Model
 
-model2 <-plm(poolconstit
-             ~ AIGO + trade + disparity + log(gdp_cap) + number + alliances,
+model2 <-plm(pooling
+             ~ polyarchy + trade + disparity + log(gdp_cap) + number + alliances,
              data = igo,
              index = c("cow_igocode", "year"),
              model = "within",
@@ -62,4 +62,3 @@ model4 <-plm(poolconstit
 )
 
 summary(model4)
-
