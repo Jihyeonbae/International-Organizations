@@ -9,7 +9,7 @@ qog<-read_csv("/Volumes/GoogleDrive/My Drive/IGO/Data/QOG/qog_bas_ts_jan19.csv")
 vdem<-read_csv("/Volumes/GoogleDrive/My Drive/IGO/Data/VDEM/V-Dem-CY-Full+Others-v9.csv")
 POLITY <- read_excel("/Volumes/GoogleDrive/My Drive/IGO/Data/POLITY.xls")
 MIA <- read_dta("/Volumes/GoogleDrive/My Drive/IGO/Data/DP_May 2021.dta")
-COW <- read_dta("/Volumes/GoogleDrive/My Drive/IGO/Data/COW/IGO_stata/igo_year_format_3.dta")
+COW <- read_dta("/Volumes/GoogleDrive/My Drive/IGO/Data/COW/IGO_stata/igo_yearView(_format_3.dta")
 ccode <- read_dta("/Volumes/GoogleDrive/My Drive/IGO/Data/COW/IGO_stata/state_year_format3.dta")
 
 # country data
