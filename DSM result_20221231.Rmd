@@ -1,0 +1,205 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r wrangling, echo=FALSE}
+####Modeling
+
+library("pacman")
+p_load(plm, plyr, dplyr, ggplot2, MASS, tidyverse, magrittr, RColorBrewer, readxl,
+       readr, rtweet, lubridate, scales, leaflet, academictwitteR, ggmap, quanteda,
+       ggmap, jtools, googledrive, palmerpenguins, haven, RColorBrewer, tile, simcf,
+       lmtest, texreg, sandwich, stargazer, lmtest)
+
+#wrangling
+igo <-readRDS("IGOdata.rds")
+igo <- igo%>%
+  dplyr::filter(year>=1950) %>%
+  dplyr::mutate(AIGO = ifelse(polyarchy < 0.5, 1, 0),
+                DIGO = ifelse(polyarchy >-0.5, 1, 0),
+                AIGO_polity = ifelse(polity < 6, 1, 0 )) %>%
+  dplyr::mutate_all(~ifelse(is.nan(.), NA, .)) %>%
+  dplyr::arrange(ioname, year) %>%
+  dplyr::mutate(ln_gdpc = log(gdp_cap))%>%
+  dplyr::select(ioname, year, polyarchy, poolconstit, delconstit, everything())%>%
+  as.data.frame()
+```
+
+```{r different models, echo=FALSE}
+#Model1) Pooled OLS Model
+model1 <-lm(poolconstit
+             ~ polyarchy + trade + log(gdp_cap) + number + alliances + disparity,
+             data = igo)
+summary(model1)
+
+
+#Model2) Within-FE Model only year index
+model2 <-plm(poolconstit
+                 ~ polyarchy + trade + ln_gdpc + number + alliances + disparity + social + economic,
+            data = igo,
+            index = c("year"),
+            model = "within",
+            effect = "individual",
+            na.action = na.exclude
+)
+summary(model2, vcovBK(model2))
+
+
+#Model3) Two way FE Model
+
+model3 <-plm(poolconstit
+             ~ polyarchy + trade + disparity + log(gdp_cap) + number + alliances,
+             data = igo,
+             index = c("cow_igocode", "year"),
+             model = "within",
+             effect = "twoways"
+)
+
+summary(model3, vcovBK(model3))
+
+
+#Model4) First Difference Model
+
+model4 <-plm(poolconstit
+             ~ polyarchy + trade + disparity + log(gdp_cap) + number + social + economic
+             + alliances -1,
+             data = igo,
+             index = c("ioname", "year"),
+             model = "fd"
+)
+
+summary(model4)
+
+#Model5) Random Effects Model
+
+model5 <-plm(poolconstit
+             ~ polyarchy + trade + disparity + log(gdp_cap) + number + social + economic
+             + alliances ,
+             data = igo,
+             index = c("ioname", "year"),
+             model = "random"
+)
+
+summary(model5)
+```
+
+
+## result table print
+```{r }
+#Pooling1
+model1 <-plm(poolconstit
+                           ~ polyarchy,
+            data = igo,
+            index = c("year"),
+            model = "within",
+            effect = "individual",
+            na.action = na.exclude)
+
+#Pooling2
+model2 <-plm(poolconstit
+                           ~ polyarchy + trade + ln_gdpc + number + alliances + disparity + social + economic,
+            data = igo,
+            index = c("year"),
+            model = "within",
+            effect = "individual",
+            na.action = na.exclude)
+
+
+
+#Delegation1
+model3 <-plm(delconstit
+                           ~ polyarchy,
+            data = igo,
+            index = c("year"),
+            model = "within",
+            effect = "individual",
+            na.action = na.exclude)
+
+
+#Delegation2
+model4 <-plm(delconstit
+                           ~ polyarchy + trade + ln_gdpc + number + alliances + disparity + social + economic,
+            data = igo,
+            index = c("year"),
+            model = "within",
+            effect = "individual",
+            na.action = na.exclude)
+```
+
+
+#print
+```{r results = 'asis', echo = FALSE}
+
+texreg(list(model1, model2, model3, model4), digits = 4,
+          custom.gof.rows=list("Fixed effects" = c("Year", "Year", "Year", "Year")),
+          custom.header = list("Pooling " = 1:2, 
+                               "Delegation " = 3:4),
+          center=TRUE)
+
+stargazer(model1, model2, model3, model4, 
+          digits = 4,
+          type = "latex", 
+          title = "Result Table",
+          omit.stat=c("f"),
+          se = list(vcovBK(model1), vcovBK(model2), vcovBK(model3), vcovBK(model4)),
+          add.lines=list(c('Fixed Effects', 'Year', 'Year', 'Year', 'Year')))
+
+```
+
+          
+
+
+
+### prediction plot 
+
+##```{r}
+summary(plm::fixef(model2))
+fx_level <-fixef(model2, type = "level")
+fx_dmean <-fixef(model2, type = "dmean")
+overallint <-plm::within_intercept(model2)
+fixefs <- plm::fixef(model2)[plm::index(model2, which = "id")]
+fitted_by_hand <- fixefs + model2$coefficients["polyarchy"] * model2$model$polyarchy +
+                           model2$coefficients["trade"] * model2$model$trade +
+                           model2$coefficients["ln_gdpc"] * model2$model$ln_gdpc+
+                           model2$coefficients["number"] * model2$model$number+
+                           model2$coefficients["alliances"] * model2$model$alliances+
+                           model2$coefficients["disparity"] * model2$model$disparity+
+                           model2$coefficients["social"] * model2$model$social+
+                           model2$coefficients["economic"] * model2$model$economic 
+
+new<-as.data.frame(fitted_by_hand)
+ggplot(new, aes(poolconstit, polyarchy))+geom_point()
+
+```
+
+## robustness 1: interaction model
+
+#```{r}
+int <-plm(poolconstit
+             ~ polyarchy*number + trade + ln_gdpc + number + polyarchy + alliances + disparity + social +
+             economic,
+            data = igo,
+            index = c("year"),
+            model = "within",
+            effect = "individual"
+)
+summary(int, vcovBK(int))
+```
+
+
+## robustness 2: binary model
+
+##```{r}
+binary <-plm(poolconstit
+             ~ AIGO + trade + ln_gdpc + number + alliances + disparity + social +
+             economic,
+            data = igo,
+            index = c("year"),
+            model = "within",
+            effect = "individual"
+)
+summary(binary, vcovBK(binary))
+```
+
+

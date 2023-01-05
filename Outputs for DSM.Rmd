@@ -1,0 +1,344 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+```{r setup, echo=FALSE, results = 'hide', warning=FALSE}
+library(plm)
+library("pacman")
+p_load(plyr, dplyr, ggplot2, MASS, tidyverse, magrittr, RColorBrewer, readxl,
+       readr, rtweet, lubridate, scales, leaflet, academictwitteR, ggmap, quanteda,
+       ggmap, jtools, googledrive, palmerpenguins, haven, lmerTest, sjPlot, sjmisc, modelsummary, stargazer)
+
+```
+
+```{r wrangling, echo=FALSE, results = 'HIDE'}
+igo <-readRDS("IGOdata.rds")
+DSM_data <- igo%>%
+  dplyr::filter(year>=1950) %>%
+  dplyr::mutate(AIGO = ifelse(polyarchy < 0.5, 1, 0),
+                DIGO = ifelse(polyarchy >-0.5, 1, 0),
+                AIGO_polity = ifelse(polity < 6, 1, 0 )) %>%
+  dplyr::mutate_all(~ifelse(is.nan(.), NA, .)) %>%
+  dplyr::arrange(ioname, year) %>%
+  dplyr::select(ioname, year, polyarchy, DS_sum_st, everything())%>%
+  as.data.frame()
+
+write.csv(df, file = "DSM_data.csv")
+
+```
+
+
+# Summary Statistics
+```{r, echo=FALSE, results='asis', warning=FALSE}
+stargazer(DSM_data, type="html")
+
+```
+
+
+
+```{r continuous variable, echo=FALSE, results = FALSE}
+
+#modeling (1) year-fixed effects baseline 
+DSM_1 <-plm(DS_sum_st
+            ~ polyarchy,
+            data = DSM_data,
+            index = c("year"),
+            model = "within",
+            effect = "individual"
+)
+summary(DSM_1, vcovBK(DSM_1)) #returns panel-heteroskedasticity adjusted standard errors
+
+DSM_2 <-plm(DS_sum_st
+            ~ polyarchy + log(gdp_cap) + alliances + disparity + polity_heterogeneity
+            + number + trade + political + social,
+            data = DSM_data,
+            index = c("year"),
+            model = "within",
+            effect = "individual"
+)
+summary(DSM_2, vcovBK(DSM_2))
+
+#modeling (3) two-way fixed effects
+DSM_3 <-plm(DS_sum_st
+            ~ polyarchy + log(gdp_cap) + alliances + disparity + polity_heterogeneity
+            + number + trade + political + social,
+            data = DSM_data,
+            index = c("ioname", "year"),
+            model = "within",
+            effect = "twoways"
+)
+summary(DSM_3, vcovBK(DSM_3))
+
+# modeling (4) First difference model (null results)
+DSM_4 <-plm(DS_sum_st
+            ~ polyarchy + log(gdp_cap) + alliances + disparity + polity_heterogeneity
+            + number + trade + political + social -1,
+            data = DSM_data,
+            index = c("ioname", "year"),
+            model = "fd"
+)
+summary(DSM_4)
+
+#modeling (5) random effects
+DSM_5 <-plm(DS_sum_st
+            ~ polyarchy + log(gdp_cap) + alliances + disparity + polity_heterogeneity
+            + number + trade + political + social,
+            data = DSM_data,
+            index = c("ioname", "year"),
+            model = "random")
+summary(DSM_5, vcovBK(DSM_5))
+
+```
+
+
+# Models with continuous polyarchy score
+```{r, results='asis', warning = FALSE, echo=FALSE}
+
+stargazer(DSM_1, DSM_2, DSM_3, DSM_5,
+          type="html",
+          keep.stat="n",
+          column.labels = c("Year FE","Year FE Controls", "Two way FE", "Random Effects"),
+          se=list(vcovBK(DSM_1), vcovBK(DSM_2), vcovBK(DSM_3), vcovBK(DSM_5)),
+          title="Delegation Level",
+          omit="as.factor",
+          notes=c("Fixed effects estimated but not shown in Fixed Effects column"),
+          add.lines = list(c("Fixed effects?", "Year", "Year", "Twoway", "Random")),
+         dep.var.labels = "Delegation DSM")
+
+
+models <- list("Baseline"=DSM_1, "Year FE"=DSM_2, "Twoway FE"=DSM_3, "Random"=DSM_5) 
+
+b <- list(geom_vline(xintercept = 0, color = 'orange'),
+          annotate("rect", alpha = .1,
+                   xmin = -.5, xmax = .5, 
+                   ymin = -Inf, ymax = Inf))
+
+modelplot(models, 
+          background = b,
+          se=list(vcovBK(DSM_1), vcovBK(DSM_2), vcovBK(DSM_3), vcovBK(DSM_5)),
+          coef_omit = 'Interc') +
+  labs(x = "Coefficients",
+       y = "Variables", 
+       title = "IGO Polyarchy Score on Delegation")+
+  xlim(-0.25,0.50)
+
+
+```
+
+
+
+```{r AIGO as binary, results=FALSE, warning=FALSE, error=FALSE, echo=FALSE}
+#modeling (1) year fixed effects
+AIGO_1 <-plm(DS_sum_st
+            ~ AIGO,
+            data = DSM_data,
+            index = c("year"),
+            model = "within",
+            effect = "individual"
+)
+summary(AIGO_1, vcovBK(AIGO_1))
+
+AIGO_2 <-plm(DS_sum_st
+            ~ AIGO + log(gdp_cap) + alliances + disparity + polity_heterogeneity
+            + number + trade + political + social,
+            data = DSM_data,
+            index = c("year"),
+            model = "within",
+            effect = "individual"
+)
+summary(AIGO_2, vcovBK(AIGO_2))
+
+#modeling (3) two-way fixed effects
+AIGO_3 <-plm(DS_sum_st
+            ~ AIGO + log(gdp_cap) + alliances + disparity + polity_heterogeneity
+            + number  + trade + political + social,
+            data = DSM_data,
+            index = c("ioname", "year"),
+            model = "within",
+            effect = "twoways"
+)
+summary(AIGO_3, vcovBK(AIGO_3))
+
+
+# modeling (4) First difference model
+AIGO_4 <-plm(DS_sum_st
+            ~ AIGO + log(gdp_cap) + alliances + disparity + polity_heterogeneity
+            + number  + trade + political + social -1,
+            data = DSM_data,
+            index = c("ioname", "year"),
+            model = "fd"
+)
+
+summary(AIGO_4)
+
+
+#modeling (5) random effects
+AIGO_5 <-plm(DS_sum_st
+            ~ AIGO + log(gdp_cap) + alliances + disparity + polity_heterogeneity
+            + number  + trade + political + social,
+            data = DSM_data,
+            index = c("ioname", "year"),
+            model = "random")
+
+summary(AIGO_5, vcovBK(AIGO_5))
+
+```
+
+
+
+# Models with binary variable AIGO 
+```{r, results='asis', warning=FALSE, echo=FALSE}
+
+stargazer(AIGO_1, AIGO_2, AIGO_3, AIGO_5,
+          type="html",
+          keep.stat="n",
+          column.labels = c("Year FE","Year FE Controls", "Two way FE", "Random Effects"),
+          se=list(vcovBK(AIGO_1), vcovBK(AIGO_2), vcovBK(AIGO_3), vcovBK(AIGO_5)),
+          title="Delegation Level",
+          omit="as.factor",
+          notes=c("Fixed effects estimated but not shown in Fixed Effects column"),
+          add.lines = list(c("Fixed effects?", "Year", "Year", "Twoway", "Random")),
+         dep.var.labels = "Delegation DSM")
+
+models2 <- list("Baseline"=AIGO_1, "Year FE"=AIGO_2, "Twoway FE"=AIGO_3, "Random"=AIGO_5) 
+
+b <- list(geom_vline(xintercept = 0, color = 'orange'),
+          annotate("rect", alpha = .1,
+                   xmin = -.5, xmax = .5, 
+                   ymin = -Inf, ymax = Inf))
+
+modelplot(models2, 
+          background = b,
+          se=list(vcovBK(AIGO_1), vcovBK(AIGO_2), vcovBK(AIGO_3), vcovBK(AIGO_5)),
+          coef_omit = 'Interc') +
+  labs(x = "Coefficients",
+       y = "Variables", 
+       title = "AIGO vs. DIGO on Delegation")+
+  xlim(-0.25,0.25)
+
+```
+
+
+
+```{r, results = FALSE, echo=FALSE}
+# Interaction Terms ------------------------------------------------------------------
+
+interaction1 <-plm(DS_sum_st
+            ~ factor(AIGO)/disparity + log(gdp_cap) + alliances + polity_heterogeneity
+             + trade + political + social + number,
+            data = DSM_data,
+            index = c("year"),
+            effect = "individual"
+)
+summary(interaction1, vcovBK(interaction1))
+
+interaction2 <-plm(DS_sum_st
+            ~ factor(AIGO)/disparity + log(gdp_cap) + alliances + polity_heterogeneity
+             + trade + political + social + number,
+            data = DSM_data,
+            index = c("year"),
+            effect = "twoway"
+)
+summary(interaction2, vcovBK(interaction2))
+
+interaction3 <-plm(DS_sum_st
+            ~ factor(AIGO)/number + log(gdp_cap) + alliances + disparity + polity_heterogeneity
+             + trade + political + social,
+            data = DSM_data,
+            index = c("year"),
+            model = "within",
+            effect = "individual"
+)
+summary(interaction3, vcovBK(interaction3))
+
+interaction4 <-plm(DS_sum_st
+            ~ factor(AIGO)/number + log(gdp_cap) + alliances + disparity + polity_heterogeneity + trade + political + social,
+            data = DSM_data,
+            index = c("ioname", "year"),
+            model = "within",
+            effect = "twoways"
+)
+summary(interaction4, vcovBK(interaction4))
+
+interaction5 <-plm(DS_sum_st
+            ~ factor(AIGO)/factor(economic) + number + log(gdp_cap) + alliances + disparity + polity_heterogeneity + trade + political,
+            data = DSM_data,
+            index = c( "year"),
+            model = "within",
+            effect = "time"
+)
+summary(interaction5, vcovBK(interaction5))
+
+interaction6 <-plm(DS_sum_st
+            ~ factor(AIGO)/factor(economic) + number + log(gdp_cap) + alliances + disparity + polity_heterogeneity + trade + political,
+            data = DSM_data,
+            index = c("ioname","year"),
+            model = "within",
+            effect = "twoways"
+)
+summary(interaction6, vcovBK(interaction6))
+
+
+
+```
+
+# Interaction Term Models
+```{r, results='asis', warning = FALSE, echo=FALSE}
+
+stargazer(interaction1, interaction2, interaction5, interaction6,
+          type="html",
+          keep.stat="n",
+          column.labels = c("Disparity","Disparity", "Economic", "Economic"),
+          se=list(vcovBK(interaction1), vcovBK(interaction2),vcovBK(interaction5), vcovBK(interaction6)),
+          title="Delegation Level",
+          omit="as.factor",
+          notes=c("Fixed effects estimated but not shown in Fixed Effects column"),
+          add.lines = list(c("Fixed effects?", "Year", "Twoway", "Year", "Twoway", "Year", "Twoway")),
+         dep.var.labels = "Delegation DSM")
+
+hetero_int_models<-list("Year FE"=interaction1, "Twoway FE" = interaction2)
+
+
+modelplot(hetero_int_models, 
+          background = b,
+          se=list(vcovBK(interaction1), vcovBK(interaction2)) +
+            geom_vline(xintercept=0, col="orange")) +
+  labs(x = "Marginal effect",
+    title = " Marginal difference between AIGO and DIGO on Delegation", 
+    subtitle = "Conditional on polity heterogeneity"
+    )+
+  xlim(-0.25,0.1)
+
+
+n_int_models<-list("Year FE"=interaction3, "Twoway FE" = interaction4)
+
+
+
+modelplot(n_int_models,
+          background = b,
+          se=list(vcovBK(interaction3), vcovBK(interaction4)) +
+            geom_vline(xintercept=0, col="orange")) +
+  labs(x = "Marginal effect",
+    title = " Marginal difference between AIGO and DIGO on Delegation", 
+    subtitle = "Conditional on the number of member states"
+    )+
+  xlim(-0.25,0.1)
+
+econ_int_models<-list("Year FE" = interaction5, "Twoway FE" = interaction6)
+
+modelplot(econ_int_models,
+          background = b,
+          se=list(vcovBK(interaction5), vcovBK(interaction6)) +
+            geom_vline(xintercept=0, col="orange")) +
+  labs(x = "Marginal effect",
+    title = " Marginal difference between AIGO and DIGO on Delegation", 
+    subtitle = "Conditional on the function"
+    )+
+  xlim(-0.25,0.1)
+
+```
+
+

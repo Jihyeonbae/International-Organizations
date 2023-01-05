@@ -9,12 +9,12 @@ qog<-read_csv("/Volumes/GoogleDrive/My Drive/IGO/Data/QOG/qog_bas_ts_jan19.csv")
 vdem<-read_csv("/Volumes/GoogleDrive/My Drive/IGO/Data/VDEM/V-Dem-CY-Full+Others-v9.csv")
 POLITY <- read_excel("/Volumes/GoogleDrive/My Drive/IGO/Data/POLITY.xls")
 MIA <- read_dta("/Volumes/GoogleDrive/My Drive/IGO/Data/DP_May 2021.dta")
-COW <- read_dta("/Volumes/GoogleDrive/My Drive/IGO/Data/COW/IGO_stata/igo_yearView(_format_3.dta")
+COW <- read_dta("/Volumes/GoogleDrive/My Drive/IGO/Data/COW/IGO_stata/igo_year_format_3.dta")
 ccode <- read_dta("/Volumes/GoogleDrive/My Drive/IGO/Data/COW/IGO_stata/state_year_format3.dta")
 
 # country data
 qog <-qog %>%
-  dplyr::select(cname, year, ccodecow, wdi_gdpcapcon2010, cspf_sfi, iiag_rol, wdi_pop, atop_number, p_polity2, chga_demo, wdi_trade, vdem_polyarchy)%>%
+  dplyr::select(cname, year, ccodecow, wdi_gdpcapcon2010, cspf_sfi, iiag_rol, wdi_pop, atop_number, p_polity2, chga_demo, wdi_trade, vdem_polyarchy, vdem_libdem)%>%
   dplyr::rename(cow_ccode=ccodecow)%>%
   dplyr::relocate(cow_ccode, cname, year)
 
@@ -47,11 +47,16 @@ igo <- COW %>%
 igo <- igo %>%
   dplyr::group_by(cow_igocode, year) %>%
   dplyr::summarise(polyarchy=mean(vdem_polyarchy, na.rm=T),
+                polyarchy_median=median(vdem_polyarchy, na.rm=T),
                 libdem=mean(vdem_libdem, na.rm=T),
+                libdem_median=median(vdem_libdem, na.rm=T),
                 polity=mean(p_polity2, na.rm=T),
+                polity_median=median(p_polity2, na.rm=T),
                 gdp_cap=mean(wdi_gdpcapcon2010, na.rm=T),
                 alliances=mean(atop_number, na.rm=T),
-                disparity=sd(wdi_gdpcapcon2010, na.rm=T),
+                disparity=sd(log(wdi_gdpcapcon2010), na.rm=T),
+                polity_heterogeneity=sd(p_polity2, na.rm=T),
+                polyarchy_heterogeneity=sd(vdem_polyarchy, na.rm=T),
                 number=n(),
                 trade=mean(wdi_trade, na.rm=T),
                 percentage=sum(chga_demo, na.rm=T)/number,
@@ -62,7 +67,7 @@ igo <- igo %>%
 # merging with MIA data
 
 MIA <- MIA %>%
-  dplyr::select(ioname, acronym, ionumber, year, inception, typeI, pooling, delegation, delconstit, poolconstit)%>%
+  dplyr::select(ioname, acronym, ionumber, year, inception, typeI, pooling, delegation, delconstit, poolconstit, DS_sum_st)%>%
   dplyr::rename(cow_igocode = ionumber)
 
 df <- MIA %>%
