@@ -100,7 +100,7 @@ summary(DSM_5, vcovBK(DSM_5))
 stargazer(DSM_1, DSM_2, DSM_3, DSM_5,
           type="html",
           keep.stat="n",
-          column.labels = c("Year FE","Year FE Controls", "Two way FE", "Random Effects"),
+          column.labels = c("Baseline","YearFE Controls", "Two way FE", "Random Effects"),
           se=list(vcovBK(DSM_1), vcovBK(DSM_2), vcovBK(DSM_3), vcovBK(DSM_5)),
           title="Delegation Level",
           omit="as.factor",
