@@ -125,6 +125,10 @@ modelplot(models,
        title = "IGO Polyarchy Score on Delegation")+
   xlim(-0.25,0.50)
 
+modelsummary(models, 
+             se="panel-corrected",
+             stars=TRUE
+             )
 
 ```
 
@@ -218,6 +222,10 @@ modelplot(models2,
        y = "Variables", 
        title = "AIGO vs. DIGO on Delegation")+
   xlim(-0.25,0.25)
+
+modelsummary(models2, 
+          se="panel-corrected",
+          stars=TRUE)
 
 ```
 
@@ -338,6 +346,13 @@ modelplot(econ_int_models,
     subtitle = "Conditional on the function"
     )+
   xlim(-0.25,0.1)
+
+modelsummary(hetero_int_models, 
+             se="panel-corrected", 
+             stars=TRUE)
+modelsummary(econ_int_models, 
+             se="panel-corrected", 
+             stars=TRUE)
 
 ```
 
