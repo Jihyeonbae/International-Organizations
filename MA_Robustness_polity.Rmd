@@ -1,0 +1,195 @@
+---
+title: Robustness test result using "polity" 
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r wrangling}
+####Modeling
+
+library("pacman")
+p_load(plm, plyr, dplyr, ggplot2, MASS, tidyverse, magrittr, RColorBrewer, readxl,
+       readr, rtweet, lubridate, scales, leaflet, academictwitteR, ggmap, quanteda,
+       ggmap, jtools, googledrive, palmerpenguins, haven, RColorBrewer, tile, simcf,
+       lmtest, texreg, sandwich, stargazer, lmtest, modelsummary)
+
+#wrangling
+igo <-readRDS("IGOdata.rds")
+igo <- igo%>%
+  dplyr::filter(year>=1950) %>%
+  dplyr::mutate(AIGO = ifelse(polyarchy < 0.5, 1, 0),
+                DIGO = ifelse(polyarchy >-0.5, 1, 0),
+                AIGO_polity = ifelse(polity < 6, 1, 0 )) %>%
+  dplyr::mutate_all(~ifelse(is.nan(.), NA, .)) %>%
+  dplyr::arrange(ioname, year) %>%
+  dplyr::mutate(ln_gdpc = log(gdp_cap))%>%
+  dplyr::select(ioname, year, polyarchy, poolconstit, delconstit, everything())%>%
+  as.data.frame()
+```
+
+```{r different models}
+#Model1) Pooled OLS Model
+model1 <-lm(poolconstit
+             ~ polity + trade + log(gdp_cap) + number + alliances + polity_heterogeneity + disparity,
+             data = igo)
+
+
+#Model2) Within-FE Model only year index
+model2 <-plm(poolconstit
+                 ~ polity + trade + ln_gdpc + number + alliances + polity_heterogeneity + disparity + social + economic,
+            data = igo,
+            index = c("year"),
+            model = "within",
+            effect = "individual",
+            na.action = na.exclude
+)
+
+
+#Model3) Two way FE Model
+
+model3 <-plm(poolconstit
+             ~ polity + trade + disparity + log(gdp_cap) + number + alliances + polity_heterogeneity,
+             data = igo,
+             index = c("cow_igocode", "year"),
+             model = "within",
+             effect = "twoways"
+)
+
+
+#Model4) First Difference Model
+
+model4 <-plm(poolconstit
+             ~ polity + trade+ polity_heterogeneity + disparity + log(gdp_cap) + number + social + economic
+             + alliances -1,
+             data = igo,
+             index = c("ioname", "year"),
+             model = "fd"
+)
+
+
+#Model5) Random Effects Model
+
+model5 <-plm(poolconstit
+             ~ polity + trade + disparity + log(gdp_cap) + number + social + economic
+             + alliances + polity_heterogeneity,
+             data = igo,
+             index = c("ioname", "year"),
+             model = "random"
+)
+
+```
+
+
+## result table print
+```{r }
+#Pooling1
+model1 <-plm(poolconstit
+                           ~ polity,
+            data = igo,
+            index = c("year"),
+            model = "within",
+            effect = "individual",
+            na.action = na.exclude)
+
+
+#Pooling2
+model2 <-plm(poolconstit
+                           ~ polity + trade + ln_gdpc + number + alliances + polity_heterogeneity + disparity + social + economic,
+            data = igo,
+            index = c("year"),
+            model = "within",
+            effect = "individual",
+            na.action = na.exclude)
+
+
+
+#Delegation1
+model3 <-plm(delconstit
+                           ~ polity,
+            data = igo,
+            index = c("year"),
+            model = "within",
+            effect = "individual",
+            na.action = na.exclude)
+
+
+
+#Delegation2
+model4 <-plm(delconstit
+                           ~ polity + trade + ln_gdpc + number + alliances + polity_heterogeneity + disparity + social + economic,
+            data = igo,
+            index = c("year"),
+            model = "within",
+            effect = "individual",
+            na.action = na.exclude)
+
+
+```
+
+
+#print
+```{r results = 'asis'}
+
+htmlreg(list(model1, model2, model3, model4), digits = 4,
+          custom.gof.rows=list("Fixed effects" = c("Year", "Year", "Year", "Year")),
+          custom.header = list("Pooling " = 1:2, 
+                               "Delegation " = 3:4),
+          center=TRUE)
+
+stargazer(model1, model2, model3, model4, 
+          digits = 4,
+          type = "latex", 
+          title = "Result Table",
+          omit.stat=c("f"),
+          se = list(vcovBK(model1), vcovBK(model2), vcovBK(model3), vcovBK(model4)),
+          add.lines=list(c('Fixed Effects', 'Year', 'Year', 'Year', 'Year')))
+
+models_pooling <- list("Base model"=model1, "Extended model"=model2) 
+
+b <- list(geom_vline(xintercept = 0, color = 'orange'),
+          annotate("rect", alpha = .1,
+                   xmin = -.5, xmax = .5, 
+                   ymin = -Inf, ymax = Inf))
+
+modelplot(models_pooling, 
+          background = b,
+          vcov=list(vcovBK(model1), vcovBK(model2)),
+          coef_omit = 'Interc') +
+  labs(x = "Coefficients",
+       y = "Variables", 
+       title = "IGO Democracy Score and \n Pooling Score for Constitutional Amendments",
+       legend.position = "top")+
+  theme_bw()+
+  xlim(-0.40,0.40)
+
+ggsave("Plot1_Pooling.jpg")
+
+
+models_delegation <- list("Base model"=model3, "Extended model"=model4) 
+
+b <- list(geom_vline(xintercept = 0, color = 'orange'),
+          annotate("rect", alpha = .1,
+                   xmin = -.5, xmax = .5, 
+                   ymin = -Inf, ymax = Inf))
+
+modelplot(models_delegation, 
+          background = b,
+          vcov=list(vcovBK(model3), vcovBK(model4)),
+          coef_omit = 'Interc') +
+  labs(x = "Coefficients",
+       y = "Variables", 
+       title = "IGO Democracy Score and \n Delegation Score for Constitutional Amendments",
+       legend.position = "top")+
+  theme_bw()+
+  xlim(-0.40,0.40)
+
+ggsave("Plot2_Delegation.jpg")
+
+```
+
+          
+
+
+
+
+
