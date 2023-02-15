@@ -1,0 +1,389 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+
+
+```{r setup, echo=FALSE, results = 'hide', warning=FALSE}
+library(plm)
+library("pacman")
+p_load(plyr, dplyr, ggplot2, MASS, tidyverse, magrittr, RColorBrewer, readxl,
+       readr, rtweet, lubridate, scales, leaflet, academictwitteR, ggmap, quanteda,
+       ggmap, jtools, googledrive, palmerpenguins, haven, lmerTest, sjPlot, sjmisc, modelsummary)
+
+```
+
+```{r wrangling, echo=FALSE, results = 'HIDE'}
+igo <-readRDS("IGOdata.rds")
+DSM_data <- igo%>%
+  dplyr::filter(year>=1950) %>%
+  dplyr::mutate(AIGO = ifelse(polyarchy < 0.5, 1, 0),
+                DIGO = ifelse(polyarchy >-0.5, 1, 0),
+                AIGO_polity = ifelse(polity < 6, 1, 0 )) %>%
+  dplyr::mutate_all(~ifelse(is.nan(.), NA, .)) %>%
+  dplyr::arrange(ioname, year) %>%
+  dplyr::rename("econ_heterogeneity" = "disparity")%>%
+  dplyr::select(ioname, year, polyarchy, DS_sum_st, everything())%>%
+  as.data.frame()
+
+write.csv(df, file = "DSM_data.csv")
+
+```
+
+
+# Summary Statistics
+```{r, echo=FALSE, results='asis', warning=FALSE}
+datasummary(All(DSM_data) ~ Mean + SD + Min + Max,
+            data = DSM_data,
+            output = 'markdown')
+```
+
+
+
+```{r continuous, echo=FALSE, results = FALSE}
+#modeling (1) year-fixed effects baseline 
+DSM_1 <-plm(DS_sum_st
+            ~ polyarchy,
+            data = DSM_data,
+            index = c("year"),
+            model = "within",
+            effect = "time"
+)
+summary(DSM_1, vcovBK(DSM_1)) 
+#returns panel-heteroskedasticity adjusted standard errors
+
+DSM_2 <-plm(DS_sum_st
+            ~ polyarchy + log(gdp_cap) + alliances + econ_heterogeneity + polyarchy_heterogeneity +
+            + number + trade + political + social,
+            data = DSM_data,
+            index = c("year"),
+            model = "within",
+            effect = "time"
+)
+summary(DSM_2, vcovBK(DSM_2))
+
+
+```
+
+
+# Models with continuous polyarchy score
+```{r, results='asis', warning = FALSE, echo=FALSE}
+
+models <- list("Baseline"=DSM_1, "Year FE"=DSM_2) 
+
+b <- list(geom_vline(xintercept = 0, color = 'orange'),
+          annotate("rect", alpha = .1,
+                   xmin = -.5, xmax = .5, 
+                   ymin = -Inf, ymax = Inf))
+
+modelplot(models,
+          vcov=list(vcovBK(DSM_1), vcovBK(DSM_2)),
+          coef_omit = 'Interc') +
+  labs(x = "Coefficients",
+       y = "Variables", 
+       title = "IGO Polyarchy Score on Delegation")+
+  xlim(-0.25,0.25)
+
+modelsummary(models,  
+             stars=TRUE,
+          vcov=list(vcovBK(DSM_1), vcovBK(DSM_2)),
+          coef_omit = 'Interc') 
+
+
+```
+
+
+
+```{r AIGO as binary, results=FALSE, warning=FALSE, error=FALSE, echo=FALSE}
+#modeling (1) year fixed effects
+AIGO_1 <-plm(DS_sum_st
+            ~ AIGO,
+            data = DSM_data,
+            index = c("year"),
+            model = "within",
+            effect = "time"
+)
+summary(AIGO_1, vcovBK(AIGO_1))
+
+AIGO_2 <-plm(DS_sum_st
+            ~ AIGO + log(gdp_cap) + alliances + econ_heterogeneity + polyarchy_heterogeneity
+            + number + trade + political + social,
+            data = DSM_data,
+            index = c("year"),
+            model = "within",
+            effect = "time"
+)
+summary(AIGO_2, vcovBK(AIGO_2))
+
+```
+
+
+
+# Models with binary variable AIGO 
+```{r, results='asis', warning=FALSE, echo=FALSE}
+
+models2 <- list("Baseline"=AIGO_1, "Year FE"=AIGO_2) 
+
+b <- list(geom_vline(xintercept = 0, color = 'orange'),
+          annotate("rect", alpha = .1,
+                   xmin = -.5, xmax = .5, 
+                   ymin = -Inf, ymax = Inf))
+
+modelsummary(models2,
+             stars=TRUE,
+             vcov=list(vcovBK(AIGO_1), vcovBK(AIGO_2)),
+             coef_omit = 'Interc')
+
+modelplot(models2, 
+          background = b,
+          vcov=list(vcovBK(AIGO_1), vcovBK(AIGO_2)),
+          coef_omit = 'Interc') +
+  labs(x = "Coefficients",
+       y = "Variables", 
+       title = "AIGO vs. DIGO on Delegation")+
+  xlim(-0.25,0.25)
+
+```
+
+
+
+```{r, results = FALSE, echo=FALSE}
+# Interaction Terms ------------------------------------------------------------------
+
+interaction1 <-plm(DS_sum_st
+            ~ factor(AIGO)/econ_heterogeneity + log(gdp_cap) + alliances + polyarchy_heterogeneity
+             + trade + political + social + number,
+            data = DSM_data,
+            index = c("year"),
+            effect = "time"
+)
+
+
+interaction2 <-plm(DS_sum_st
+            ~ factor(AIGO)/number + log(gdp_cap) + alliances + econ_heterogeneity +
+              polyarchy_heterogeneity + trade + political + social,
+            data = DSM_data,
+            index = c("year"),
+            model = "within",
+            effect = "time"
+)
+
+
+interaction3 <-plm(DS_sum_st
+            ~ factor(AIGO)/polyarchy_heterogeneity + log(gdp_cap) + alliances +
+              econ_heterogeneity + trade + political + social,
+            data = DSM_data,
+            index = c( "year"),
+            model = "within",
+            effect = "time"
+)
+
+
+
+
+```
+
+# Interaction Term Models
+```{r, results='asis', warning = FALSE, echo=FALSE}
+
+modelplot(interaction1, 
+          background = b,
+          vcov=list(vcovBK(interaction1)) +
+          geom_vline(xintercept=0, col="orange")) +
+  labs(x = "Marginal effect",
+    title = " Marginal difference between AIGO and DIGO on Delegation", 
+    subtitle = "Conditional on polity heterogeneity"
+    )+
+  xlim(-0.25,0.25)
+
+
+
+modelplot(interaction2,
+          background = b,
+          vcov=list(vcovBK(interaction2)) +
+            geom_vline(xintercept=0, col="orange")) +
+  labs(x = "Marginal effect",
+    title = " Marginal difference between AIGO and DIGO on Delegation", 
+    subtitle = "Conditional on the number of member states"
+    )+
+  xlim(-0.15,0.15)
+
+
+modelplot(interaction3,
+          background = b,
+          vcov=list(vcovBK(interaction3)) +
+            geom_vline(xintercept=0, col="orange")) +
+  labs(x = "Marginal effect",
+    title = " Marginal difference between AIGO and DIGO on Delegation", 
+    subtitle = "Conditional on the polity heterogeneity"
+    )+
+  xlim(-0.15,0.15)
+
+modelsummary(list(interaction1, interaction2, interaction3), 
+             stars=TRUE,
+          vcov=list(vcovBK(interaction1), vcovBK(interaction2), vcovBK(interaction3)),
+          coef_omit = 'Interc') 
+```
+
+#Robustness Checks
+```{r continuous variable, echo=FALSE, results = FALSE}
+
+#modeling (1) year-fixed effects baseline 
+libdem1 <-plm(DS_sum_st
+            ~ libdem,
+            data = DSM_data,
+            index = c("year"),
+            model = "within",
+            effect = "individual"
+)
+summary(libdem1, vcovBK(libdem1)) #returns panel-heteroskedasticity adjusted standard errors
+
+libdem2 <-plm(DS_sum_st
+            ~ libdem + log(gdp_cap) + alliances + econ_heterogeneity +
+              polyarchy_heterogeneity
+            + number + trade + political + social,
+            data = DSM_data,
+            index = c("year"),
+            model = "within",
+            effect = "individual"
+)
+summary(libdem2, vcovBK(libdem2))
+
+polity <-plm(DS_sum_st
+            ~ polity + log(gdp_cap) + alliances + econ_heterogeneity +
+              polyarchy_heterogeneity
+            + number + trade + political + social,
+            data = DSM_data,
+            index = c("year"),
+            model = "within",
+            effect = "individual"
+)
+summary(polity, vcovBK(polity))
+
+percentage <-plm(DS_sum_st
+            ~ percentage + log(gdp_cap) + alliances + econ_heterogeneity +
+              polyarchy_heterogeneity
+            + number + trade + political + social,
+            data = DSM_data,
+            index = c("year"),
+            model = "within",
+            effect = "individual"
+)
+summary(percentage, vcovBK(percentage))
+
+modelsummary(list(libdem1, libdem2, polity, percentage),
+             stars=TRUE,
+             vcov=list(vcovBK(libdem1), vcovBK(libdem2), 
+                       vcovBK(polity), vcovBK(percentage)),
+             coef_omit = 'Interc')
+
+```
+
+# Models with continuous libdem score
+```{r, results='asis', warning = FALSE, echo=FALSE}
+
+
+models <- list("Baseline"=libdem1, "Year FE"=libdem2)
+
+b <- list(geom_vline(xintercept = 0, color = 'orange'),
+          annotate("rect", alpha = .1,
+                   xmin = -.5, xmax = .5, 
+                   ymin = -Inf, ymax = Inf))
+
+modelplot(models, 
+          background = b,
+          vcov=list(vcovBK(libdem1), vcovBK(libdem2)),
+          coef_omit = 'Interc') +
+    geom_vline(xintercept=0, col="orange")+
+  labs(x = "Coefficients",
+       y = "Variables", 
+       title = "IGO Liberal Democracy Score on Delegation")+
+  xlim(-0.25,0.25)
+
+
+```
+
+
+# Unrestricted Interactions
+```{r, results = FALSE, echo=FALSE}
+# Unrestricted Interactions ------------------------------------------------------------------
+
+interaction1_r <-plm(DS_sum_st
+            ~ factor(AIGO)*econ_heterogeneity + factor(AIGO) + econ_heterogeneity+
+              log(gdp_cap) + alliances + polyarchy_heterogeneity
+             + trade + political + social + number,
+            data = DSM_data,
+            index = c("year"),
+            effect = "time"
+)
+
+
+interaction2_r <-plm(DS_sum_st
+            ~ factor(AIGO)*number + factor(AIGO) + number+
+              log(gdp_cap) + alliances + polyarchy_heterogeneity
+             + trade + political + social + econ_heterogeneity,
+            data = DSM_data,
+            index = c("year"),
+            effect = "time"
+)
+
+
+interaction3_r <-plm(DS_sum_st
+            ~ factor(AIGO)*polyarchy_heterogeneity + factor(AIGO) +
+              polyarchy_heterogeneity+
+              log(gdp_cap) + alliances + econ_heterogeneity
+             + trade + political + social + number,
+            data = DSM_data,
+            index = c("year"),
+            model = "within",
+            effect = "time"
+)
+
+
+full_interactions<-list("Economic Heterogeneity" = interaction1_r,
+                        "Number" = interaction2_r,
+                        "Polity Heterogeneity" = interaction3_r)
+```
+
+```{r, results = 'asis'}
+
+modelsummary(full_interactions, 
+             stars=TRUE,
+             vcov=list(vcovBK(interaction1_r), 
+                       vcovBK(interaction2_r),
+                       vcovBK(interaction3_r)),
+             coef_omit = 'Interc')
+
+modelplot(interaction1_r, 
+          background = b,
+          vcov=list(vcovBK(interaction1_r)),
+          coef_omit = 'Interc') +
+    geom_vline(xintercept=0, col="orange")+
+  labs(x = "Coefficients",
+       y = "Variables", 
+       title = "Interaction Term with Economic Heterogeneity")+
+  xlim(-0.25,0.25)
+
+modelplot(interaction2_r, 
+          background = b,
+          vcov=list(vcovBK(interaction2_r)),
+          coef_omit = 'Interc') +
+    geom_vline(xintercept=0, col="orange")+
+  labs(x = "Coefficients",
+       y = "Variables", 
+       title = "Interaction Term with Number")+
+  xlim(-0.25,0.25)
+
+modelplot(interaction3_r, 
+           stars=TRUE,
+          background = b,
+          vcov=list(vcovBK(interaction3_r)),
+          coef_omit = 'Interc') +
+    geom_vline(xintercept=0, col="orange")+
+  labs(x = "Coefficients",
+       y = "Variables", 
+       title = "Interaction Term with Polity Heterogeneity")+
+  xlim(-0.25,0.25)
+
+```
